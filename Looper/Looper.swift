@@ -13,8 +13,8 @@ let kOutputBus: UInt32 = 0;
 let kInputBus: UInt32 = 1;
 
 class Looper {
-  struct RefConData {
-    var audioUnit: AudioUnit = nil;
+  class RefConData {
+    var audioUnit: AudioUnit? = nil;
     var loopDatas: LoopSounds = LoopSounds();
     var currentLoop: LoopSound?;
     var index: Int = 0;
@@ -45,7 +45,7 @@ class Looper {
     acd.componentFlags        = 0;
     acd.componentFlagsMask    = 0;
 
-    let ac = AudioComponentFindNext(nil, &acd);
+    guard let ac = AudioComponentFindNext(nil, &acd) else { return  };
     AudioComponentInstanceNew( ac, &( refData.audioUnit ) );
 
     initializeCallbacks();
@@ -53,7 +53,7 @@ class Looper {
     initializeAudioFormat();
     initializeAudioUnitSetting();
 
-    AudioUnitInitialize( refData.audioUnit );
+    AudioUnitInitialize( refData.audioUnit! );
   }
 
 
@@ -61,22 +61,22 @@ class Looper {
    * 入力、出力のコールバックを設定します
    */
   func initializeCallbacks() {
-    var inputCallback = AURenderCallbackStruct( inputProc: RecordingCallback, inputProcRefCon: &refData );
-    var outputCallback = AURenderCallbackStruct( inputProc: RenderCallback, inputProcRefCon: &refData );
+    var inputCallback = AURenderCallbackStruct( inputProc: RecordingCallback, inputProcRefCon: Unmanaged<Looper.RefConData>.passRetained(refData).toOpaque() );
+    var outputCallback = AURenderCallbackStruct( inputProc: RenderCallback, inputProcRefCon: Unmanaged<Looper.RefConData>.passRetained(refData).toOpaque() );
 
-    AudioUnitSetProperty( refData.audioUnit,
+    AudioUnitSetProperty( refData.audioUnit!,
                           kAudioOutputUnitProperty_SetInputCallback,
                           kAudioUnitScope_Global,
                           kInputBus,
                           &inputCallback,
-                          UInt32(sizeofValue( inputCallback ) ) );
+                          UInt32(MemoryLayout<AURenderCallbackStruct>.size ) );
 
-    AudioUnitSetProperty( refData.audioUnit,
+    AudioUnitSetProperty( refData.audioUnit!,
                           kAudioUnitProperty_SetRenderCallback,
                           kAudioUnitScope_Global,
                           kOutputBus,
                           &outputCallback,
-                          UInt32(sizeofValue( outputCallback ) ) );
+                          UInt32(MemoryLayout<AURenderCallbackStruct>.size ) );
   }
 
   /**
@@ -84,19 +84,19 @@ class Looper {
    */
   func initializeEnableIO() {
     var flag: UInt32 = 1;
-    AudioUnitSetProperty( refData.audioUnit,
+    AudioUnitSetProperty( refData.audioUnit!,
                           kAudioOutputUnitProperty_EnableIO,
                           kAudioUnitScope_Input,
                           kInputBus,
                           &flag,
-                          UInt32( sizeof( UInt32 ) ) );
+                          UInt32( MemoryLayout<UInt32>.size ) );
 
-    AudioUnitSetProperty( refData.audioUnit,
+    AudioUnitSetProperty( refData.audioUnit!,
                           kAudioOutputUnitProperty_EnableIO,
                           kAudioUnitScope_Output,
                           kOutputBus,
                           &flag,
-                          UInt32( sizeof( UInt32 ) ) );
+                          UInt32( MemoryLayout<UInt32>.size ) );
   }
 
   /**
@@ -114,19 +114,19 @@ class Looper {
     audioFormat.mBytesPerPacket		= 2;
     audioFormat.mBytesPerFrame		= 2;
 
-    AudioUnitSetProperty( refData.audioUnit,
+    AudioUnitSetProperty( refData.audioUnit!,
                           kAudioUnitProperty_StreamFormat,
                           kAudioUnitScope_Output,
                           kInputBus,
                           &audioFormat,
-                          UInt32( sizeof( AudioStreamBasicDescription ) ) );
+                          UInt32( MemoryLayout<AudioStreamBasicDescription>.size ) );
 
-    AudioUnitSetProperty( refData.audioUnit,
+    AudioUnitSetProperty( refData.audioUnit!,
                           kAudioUnitProperty_StreamFormat,
                           kAudioUnitScope_Input,
                           kOutputBus,
                           &audioFormat,
-                          UInt32( sizeof( AudioStreamBasicDescription ) ) );
+                          UInt32( MemoryLayout<AudioStreamBasicDescription>.size ));
   }
 
   /**
@@ -134,12 +134,12 @@ class Looper {
    */
   func initializeAudioUnitSetting() {
     var flag = 0;
-    AudioUnitSetProperty( refData.audioUnit,
+    AudioUnitSetProperty( refData.audioUnit!,
                           kAudioUnitProperty_ShouldAllocateBuffer,
                           kAudioUnitScope_Output,
                           kInputBus,
                           &flag,
-                          UInt32( sizeof( UInt32 ) ) );
+                          UInt32( MemoryLayout<UInt32>.size ) );
   }
 
   // MARK: -
@@ -164,7 +164,7 @@ class Looper {
     print( "start" );
     refData.currentLoop = LoopSound();
     processing = true;
-    AudioOutputUnitStart( refData.audioUnit );
+    AudioOutputUnitStart( refData.audioUnit! );
   }
 
   func stop() {
@@ -173,8 +173,8 @@ class Looper {
     }
 
     print( "end" );
-    AudioOutputUnitStop( refData.audioUnit );
-    refData.loopDatas.add( refData.currentLoop! );
+    AudioOutputUnitStop( refData.audioUnit! );
+    refData.loopDatas.add( element: refData.currentLoop! );
     refData.currentLoop = nil;
     refData.index = 0;
     processing = false;
@@ -187,23 +187,23 @@ class Looper {
 /**
  * 音声入力コールバックです
  */
-func RecordingCallback( inRefCon: UnsafeMutablePointer<Void>,
-                        ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
-                        inTimeStamp: UnsafePointer<AudioTimeStamp>,
-                        inBusNumber: UInt32,
-                        inNumberFrames: UInt32,
-                        ioData: UnsafeMutablePointer<AudioBufferList>) -> (OSStatus)
+func RecordingCallback( inRefCon: UnsafeMutableRawPointer,
+                     ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+                     inTimeStamp: UnsafePointer<AudioTimeStamp>,
+                     inBusNumber: UInt32,
+                     inNumberFrames: UInt32,
+                     ioData: UnsafeMutablePointer<AudioBufferList>?) -> (OSStatus)
 {
-  let refData = UnsafeMutablePointer<Looper.RefConData>( inRefCon ).memory;
+    let refData = unsafeBitCast( inRefCon, to: Looper.RefConData.self)
   // バッファ確保
   // バッファサイズ計算。Channel * Frame * sizeof( Int16 )
-  let dataSize = UInt32( 1 * inNumberFrames * UInt32( sizeof( Int16 ) ) );
+    let dataSize = UInt32( 1 * inNumberFrames * UInt32( MemoryLayout<Int16>.size ) );
   let dataMem = malloc( Int( dataSize ) );
   let audioBuffer = AudioBuffer.init( mNumberChannels: 1, mDataByteSize: dataSize, mData: dataMem );
   var audioBufferList = AudioBufferList.init( mNumberBuffers: 1, mBuffers: audioBuffer );
 
   // AudioUnitRender呼び出し
-  AudioUnitRender( refData.audioUnit,
+  AudioUnitRender( refData.audioUnit!,
                    ioActionFlags,
                    inTimeStamp,
                    inBusNumber,
@@ -212,8 +212,8 @@ func RecordingCallback( inRefCon: UnsafeMutablePointer<Void>,
 
   // もらってきたバッファをLoopSoundsにadd
   let ubpBuf = UnsafeBufferPointer<Int16>( audioBufferList.mBuffers );
-  refData.currentLoop!.add( Array( ubpBuf ) );
-  dataMem.dealloc( 1 );
+    refData.currentLoop!.add( buffer: Array( ubpBuf ) );
+  free(dataMem)
 
   return noErr;
 }
@@ -221,22 +221,23 @@ func RecordingCallback( inRefCon: UnsafeMutablePointer<Void>,
 /**
  * 音声出力コールバックです
  */
-func RenderCallback( inRefCon: UnsafeMutablePointer<Void>,
+
+func RenderCallback( inRefCon: UnsafeMutableRawPointer,
                      ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
                      inTimeStamp: UnsafePointer<AudioTimeStamp>,
                      inBusNumber: UInt32,
                      inNumberFrames: UInt32,
-                     ioData: UnsafeMutablePointer<AudioBufferList>) -> (OSStatus)
+                     ioData: UnsafeMutablePointer<AudioBufferList>?) -> (OSStatus)
 {
-  let refData = UnsafeMutablePointer<Looper.RefConData>( inRefCon ).memory;
+    let refData = unsafeBitCast( inRefCon, to: Looper.RefConData.self)
   // LoopSoundsから再生する範囲のAudioBufferを取得
   let end = ( refData.currentLoop?.buffers.count )! % Int( refData.loopDatas.loopCount() );
-  let start = end - Int( inNumberFrames );
+    let start = end - Int( inNumberFrames ) >= 0 ? end - Int( inNumberFrames ) : 0
 
-  var arr = refData.loopDatas.get( start, endIndex: end );
+    let arr = refData.loopDatas.get( beginIndex: start, endIndex: end );
 
   // ioDataのバッファにコピー
-  let buf = UnsafeMutableBufferPointer<Int16>( ioData.memory.mBuffers );
+    let buf = UnsafeMutableBufferPointer<Int16>( (ioData?.pointee.mBuffers)! );
   for i in 0 ..< arr.count {
     buf[ i ] = arr[ i ];
   }
@@ -285,7 +286,7 @@ class LoopSounds {
     for i in beginIndex ..< endIndex {
       sum = 0;
       for element in elements {
-        sum += Int16( Int16( element.get( i ) / Int16( elements.count ) ) );
+        sum += Int16( Int16( element.get( index: i ) / Int16( elements.count ) ) );
       }
       result.append( sum );
     }
