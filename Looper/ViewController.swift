@@ -18,11 +18,11 @@ class ViewController: UIViewController {
     super.viewDidLoad()
 
     // 再生ボタン
-    btPlay.setTitle("PLAY", forState: UIControlState.Normal);
-    btPlay.setTitle("PLAY", forState: UIControlState.Highlighted);
-    btPlay.setTitleColor(UIColor.blackColor(), forState: UIControlState.Normal);
-    btPlay.setTitleColor(UIColor.lightGrayColor() , forState: UIControlState.Highlighted);
-    btPlay.addTarget(self, action: "onClickedPlay:", forControlEvents: UIControlEvents.TouchUpInside);
+    btPlay.setTitle("PLAY", for: [])
+    btPlay.setTitle("PLAY", for: UIControlState.highlighted);
+    btPlay.setTitleColor(UIColor.black, for: []);
+    btPlay.setTitleColor(UIColor.lightGray , for: UIControlState.highlighted);
+    btPlay.addTarget(self, action: #selector(onClickedPlay), for: UIControlEvents.touchUpInside);
     btPlay.sizeToFit();
     btPlay.center.x = (self.view.frame.width / 2);
     btPlay.center.y = (self.view.frame.height / 2);
@@ -37,17 +37,17 @@ class ViewController: UIViewController {
     // Dispose of any resources that can be recreated.
   }
 
-  func onClickedPlay( sender: UIButton ) {
+  @objc func onClickedPlay( sender: UIButton ) {
     if ( playing ) {
-      btPlay.setTitle("PLAY", forState: UIControlState.Normal);
-      btPlay.setTitle("PLAY", forState: UIControlState.Highlighted);
+        btPlay.setTitle("PLAY", for: []);
+        btPlay.setTitle("PLAY", for: UIControlState.highlighted);
       btPlay.sizeToFit();
       playing = false;
 
       looper.end();
     } else {
-      btPlay.setTitle("STOP", forState: UIControlState.Normal);
-      btPlay.setTitle("STOP", forState: UIControlState.Highlighted);
+      btPlay.setTitle("STOP", for: []);
+        btPlay.setTitle("STOP", for: UIControlState.highlighted);
       btPlay.sizeToFit();
       playing = true;
 
